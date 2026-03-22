@@ -1,0 +1,11 @@
+[
+  {
+    "id": "geni-mcp-proxy-dev",
+    "name": "Geni MCP Proxy Dev",
+    "description": "MCP proxy server for Geni (dev).",
+    "path": "mcp/geni-mcp-proxy-dev",
+    "version": "1.0.0",
+    "kind": "exe",
+    "artifact": "Geni_MCP_proxy_dev.exe"
+  }
+]
