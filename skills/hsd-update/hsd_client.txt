@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+"""
+HSD API Client with Kerberos/SSPI authentication for updating HSD articles.
+Uses Windows integrated authentication (Negotiate/Kerberos) via the user's
+current domain login — no password prompts needed.
+
+Falls back to NTLM if SSPI is unavailable.
+"""
+
+import argparse
+import json
+import sys
+import platform
+import os
+from typing import Dict, Optional, Any
+import requests
+
+# ---------------------------------------------------------------------------
+# Authentication discovery — prefer Kerberos/SSPI, fall back to NTLM
+# ---------------------------------------------------------------------------
+AUTH_METHODS = {}
+
+# 1. Windows SSPI Negotiate (Kerberos) — transparent, no password needed
+try:
+    from requests_negotiate_sspi import HttpNegotiateAuth
+    AUTH_METHODS['kerberos'] = HttpNegotiateAuth
+    print("✓ Kerberos/SSPI auth module loaded (requests-negotiate-sspi)", file=sys.stderr)
+except ImportError:
+    pass
+
+# 2. NTLM fallback (requires username/password)
+try:
+    from requests_ntlm import HttpNtlmAuth
+    AUTH_METHODS['ntlm'] = HttpNtlmAuth
+    if 'kerberos' not in AUTH_METHODS:
+        print("✓ NTLM auth module loaded (fallback)", file=sys.stderr)
+except ImportError:
+    pass
+
+if not AUTH_METHODS:
+    print("⚠ No authentication modules found.", file=sys.stderr)
+    print("  Install: pip install requests-negotiate-sspi   (recommended on Windows)", file=sys.stderr)
+    print("       or: pip install requests-ntlm             (NTLM fallback)", file=sys.stderr)
+
+# HSD API Configuration
+HSD_BASE_URL = "https://hsdes-api.intel.com"
+
+
+class HSDAPIClient:
+    """Client for calling HSD REST API with Kerberos/SSPI authentication."""
+
+    def __init__(self, verify_ssl: bool = True, auth_method: str = 'auto'):
+        """
+        Initialize HSD API client.
+
+        Args:
+            verify_ssl: Whether to verify SSL certificates (disable for corporate proxies)
+            auth_method: Authentication method — 'auto', 'kerberos', 'ntlm', 'none'
+        """
+        self.base_url = HSD_BASE_URL
+        self.verify_ssl = verify_ssl
+        self.auth = None
+        self.session = requests.Session()
+
+        if auth_method == 'none':
+            print("⚠ Running without authentication", file=sys.stderr)
+            return
+
+        # Auto-select: prefer Kerberos/SSPI, then NTLM
+        if auth_method == 'auto':
+            if 'kerberos' in AUTH_METHODS:
+                auth_method = 'kerberos'
+            elif 'ntlm' in AUTH_METHODS:
+                auth_method = 'ntlm'
+            else:
+                print("⚠ No authentication methods available", file=sys.stderr)
+                print("  Install: pip install requests-negotiate-sspi", file=sys.stderr)
+                return
+
+        # Kerberos/SSPI — uses current Windows login, no password needed
+        if auth_method == 'kerberos' and 'kerberos' in AUTH_METHODS:
+            self.auth = AUTH_METHODS['kerberos']()
+            username = os.environ.get('USERNAME', os.environ.get('USER', 'unknown'))
+            print(f"✓ Using Kerberos/SSPI authentication (user: {username})", file=sys.stderr)
+
+        # NTLM fallback — requires domain credentials
+        elif auth_method == 'ntlm' and 'ntlm' in AUTH_METHODS:
+            import getpass
+            username = os.environ.get('USERNAME', '')
+            if not username:
+                username = input("Enter username: ")
+            password = os.environ.get('HSD_PASSWORD', '')
+            if not password:
+                password = getpass.getpass("Enter password: ")
+            if '\\' not in username and '@' not in username:
+                domain = os.environ.get('USERDOMAIN', 'INTEL')
+                username = f"{domain}\\{username}"
+            self.auth = AUTH_METHODS['ntlm'](username, password)
+            print(f"✓ Using NTLM authentication (user: {username})", file=sys.stderr)
+
+        else:
+            print(f"⚠ Auth method '{auth_method}' not available", file=sys.stderr)
+            print(f"  Available: {', '.join(AUTH_METHODS.keys()) or 'none'}", file=sys.stderr)
+    
+    def update_article(
+        self,
+        sighting_id: str,
+        tenant: str,
+        subject: str,
+        field_values: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Update an HSD article with the provided field values.
+        
+        Args:
+            sighting_id: The HSD article/sighting ID
+            tenant: The HSD tenant (e.g., "server", "client")
+            subject: The article subject/title
+            field_values: Dictionary of field names and values to update
+        
+        Returns:
+            Dictionary with 'success', 'status_code', 'data', and optional 'error' keys
+        """
+        # Construct the endpoint URL
+        endpoint = f"{self.base_url}/rest/article/{sighting_id}"
+        
+        # Build the request body
+        request_body = {
+            "tenant": tenant,
+            "subject": subject,
+            "fieldValues": [
+                {field_name: field_value}
+                for field_name, field_value in field_values.items()
+            ]
+        }
+        
+        # Prepare headers
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        try:
+            print(f"→ Updating HSD article {sighting_id}", file=sys.stderr)
+            print(f"  Tenant: {tenant}", file=sys.stderr)
+            print(f"  Subject: {subject}", file=sys.stderr)
+            print(f"  Fields: {', '.join(field_values.keys())}", file=sys.stderr)
+            
+            # Make the PUT request with authentication
+            response = self.session.put(
+                endpoint,
+                auth=self.auth,
+                headers=headers,
+                json=request_body,
+                timeout=30,
+                verify=self.verify_ssl
+            )
+            
+            # Parse response
+            try:
+                response_data = response.json()
+            except ValueError:
+                response_data = {"text": response.text}
+            
+            success = response.status_code < 400
+            status_symbol = "✓" if success else "✗"
+            print(f"{status_symbol} Response: {response.status_code}", file=sys.stderr)
+            
+            if success:
+                print(f"✓ Successfully updated HSD article {sighting_id}", file=sys.stderr)
+            else:
+                error_msg = response_data.get("error", response_data.get("message", "Unknown error"))
+                print(f"✗ Update failed: {error_msg}", file=sys.stderr)
+            
+            return {
+                "success": success,
+                "status_code": response.status_code,
+                "data": response_data,
+                "headers": dict(response.headers),
+                "sighting_id": sighting_id,
+                "article_url": f"https://hsdes-api.intel.com/article/{sighting_id}"
+            }
+        
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Request failed: {e}", file=sys.stderr)
+            return {
+                "success": False,
+                "error": str(e),
+                "status_code": 0,
+                "data": {},
+                "sighting_id": sighting_id
+            }
+    
+    def get_article(self, sighting_id: str, fields: list = None) -> Dict[str, Any]:
+        """
+        Retrieve an HSD article details.
+        
+        Args:
+            sighting_id: The HSD article/sighting ID
+            fields: Optional list of field names to return (e.g. ["id", "title", "status"])
+        
+        Returns:
+            Dictionary with article details
+        """
+        endpoint = f"{self.base_url}/rest/article/{sighting_id}"
+        if fields:
+            endpoint += "?fields=" + "%2C".join(fields)
+        
+        try:
+            fields_info = f" (fields: {', '.join(fields)})" if fields else ""
+            print(f"→ Fetching HSD article {sighting_id}{fields_info}", file=sys.stderr)
+            
+            response = requests.get(
+                endpoint,
+                auth=self.auth,
+                headers={"Accept": "application/json"},
+                timeout=30,
+                verify=self.verify_ssl
+            )
+            
+            try:
+                response_data = response.json()
+            except ValueError:
+                response_data = {"text": response.text}
+            
+            success = response.status_code < 400
+            status_symbol = "✓" if success else "✗"
+            print(f"{status_symbol} Response: {response.status_code}", file=sys.stderr)
+            
+            return {
+                "success": success,
+                "status_code": response.status_code,
+                "data": response_data,
+                "headers": dict(response.headers),
+                "sighting_id": sighting_id
+            }
+        
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Request failed: {e}", file=sys.stderr)
+            return {
+                "success": False,
+                "error": str(e),
+                "status_code": 0,
+                "data": {},
+                "sighting_id": sighting_id
+            }
+
+
+    def query_by_title(self, title: str) -> Dict[str, Any]:
+        """
+        Query HSD articles by title.
+
+        Args:
+            title: Search string to match against article titles
+
+        Returns:
+            Dictionary with 'success', 'status_code', 'data', and optional 'error' keys
+        """
+        endpoint = f"{self.base_url}/rest/query"
+        params = {"title": title}
+
+        try:
+            print(f"\u2192 Querying HSD articles with title: {title!r}", file=sys.stderr)
+
+            response = requests.get(
+                endpoint,
+                auth=self.auth,
+                headers={"Accept": "application/json"},
+                params=params,
+                timeout=30,
+                verify=self.verify_ssl
+            )
+
+            try:
+                response_data = response.json()
+            except ValueError:
+                response_data = {"text": response.text}
+
+            success = response.status_code < 400
+            status_symbol = "\u2713" if success else "\u2717"
+            print(f"{status_symbol} Response: {response.status_code}", file=sys.stderr)
+
+            return {
+                "success": success,
+                "status_code": response.status_code,
+                "data": response_data,
+                "headers": dict(response.headers),
+                "query_title": title
+            }
+
+        except requests.exceptions.RequestException as e:
+            print(f"\u2717 Request failed: {e}", file=sys.stderr)
+            return {
+                "success": False,
+                "error": str(e),
+                "status_code": 0,
+                "data": {},
+                "query_title": title
+            }
+
+
+def _resolve_update_fields(args) -> dict:
+    """Resolve field values from --fields (JSON string), --fields-file, or --set KEY=VALUE.
+
+    Priority: --fields-file > --fields > --set.  At least one must be provided.
+    If multiple are given, they are merged (later sources overwrite earlier keys).
+    """
+    merged: dict = {}
+
+    # 1. --set key=value pairs (most PowerShell-friendly)
+    if args.set:
+        for pair in args.set:
+            if "=" not in pair:
+                print(f"Error: --set value must be KEY=VALUE, got: {pair!r}", file=sys.stderr)
+                sys.exit(1)
+            key, value = pair.split("=", 1)
+            merged[key.strip()] = value.strip()
+
+    # 2. --fields JSON string
+    if args.fields:
+        try:
+            parsed = json.loads(args.fields)
+        except json.JSONDecodeError as exc:
+            print(f"Error: --fields is not valid JSON: {exc}", file=sys.stderr)
+            print("Tip: On PowerShell, use --set key=value instead, or --fields-file.",
+                  file=sys.stderr)
+            sys.exit(1)
+        if not isinstance(parsed, dict):
+            print("Error: --fields must be a JSON object (dict), e.g. '{\"status\": \"closed\"}'",
+                  file=sys.stderr)
+            sys.exit(1)
+        merged.update(parsed)
+
+    # 3. --fields-file JSON file
+    if args.fields_file:
+        try:
+            with open(args.fields_file, "r", encoding="utf-8") as f:
+                parsed = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"Error reading --fields-file: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if not isinstance(parsed, dict):
+            print("Error: --fields-file must contain a JSON object (dict)", file=sys.stderr)
+            sys.exit(1)
+        merged.update(parsed)
+
+    if not merged:
+        print("Error: You must provide at least one of --fields, --fields-file, or --set.",
+              file=sys.stderr)
+        sys.exit(1)
+
+    return merged
+
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="Query and update HSD articles using Kerberos/SSPI authentication"
+    )
+
+    # Shared arguments (added to each subcommand)
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--no-verify-ssl",
+        action="store_true",
+        help="Disable SSL certificate verification (for corporate proxies)"
+    )
+    shared.add_argument(
+        "--auth-method",
+        choices=['auto', 'kerberos', 'ntlm', 'none'],
+        default='auto',
+        help="Authentication method (default: auto — prefers Kerberos/SSPI)"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # ---- update ----
+    update_parser = subparsers.add_parser("update", parents=[shared],
+                                          help="Update an HSD article")
+    update_parser.add_argument("--sighting-id", required=True,
+                               help="HSD article/sighting ID")
+    update_parser.add_argument("--tenant", required=True,
+                               help="HSD tenant (e.g., 'server', 'client', 'graphics')")
+    update_parser.add_argument("--subject", required=True,
+                               help="Article subject/title")
+    update_parser.add_argument("--fields",
+                               help='Fields as JSON string: \'{"status": "closed"}\' '
+                                    '(tip: on PowerShell use --set or --fields-file instead)')
+    update_parser.add_argument("--fields-file",
+                               help="Path to a JSON file containing fields to update")
+    update_parser.add_argument("--set", action="append", metavar="KEY=VALUE",
+                               help='Set a field value, e.g. --set description="hello" '
+                                    '(repeatable, PowerShell-friendly)')
+
+    # ---- get ----
+    get_parser = subparsers.add_parser("get", parents=[shared],
+                                       help="Retrieve an HSD article")
+    get_parser.add_argument("--sighting-id", required=True,
+                            help="HSD article/sighting ID")
+    get_parser.add_argument("--fields",
+                            help="Comma-separated list of fields to return (e.g. 'id,title,status,priority')")
+
+    # ---- query ----
+    query_parser = subparsers.add_parser("query", parents=[shared],
+                                         help="Query HSD articles by title")
+    query_parser.add_argument("--title", required=True,
+                              help="Title search string (e.g. 'geni')")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    # Create client with selected auth
+    client = HSDAPIClient(
+        verify_ssl=not args.no_verify_ssl,
+        auth_method=args.auth_method,
+    )
+
+    # Execute command
+    if args.command == "update":
+        # Resolve field values from --fields, --fields-file, or --set
+        field_values = _resolve_update_fields(args)
+        result = client.update_article(
+            sighting_id=args.sighting_id,
+            tenant=args.tenant,
+            subject=args.subject,
+            field_values=field_values,
+        )
+    elif args.command == "get":
+        fields_list = [f.strip() for f in args.fields.split(",")] if args.fields else None
+        result = client.get_article(sighting_id=args.sighting_id, fields=fields_list)
+    elif args.command == "query":
+        result = client.query_by_title(title=args.title)
+    else:
+        print(f"Unknown command: {args.command}", file=sys.stderr)
+        sys.exit(1)
+
+    # Output clean JSON for Copilot to parse
+    print(json.dumps(result, indent=2))
+
+    # Exit with appropriate code
+    sys.exit(0 if result["success"] else 1)
+
+
+if __name__ == "__main__":
+    main()
