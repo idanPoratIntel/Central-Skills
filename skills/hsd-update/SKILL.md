@@ -1,6 +1,6 @@
 ---
 name: hsd-update
-description: Read and update HSD (Hardware Sighting Database) articles via the HSD REST API with Kerberos/SSPI authentication. Use when the user asks to read, view, get, update, modify, or close HSD articles, sightings, or hardware sighting database entries.test
+description: Read and update HSD (Hardware Sighting Database) articles via the HSD REST API with Kerberos/SSPI authentication. Use when the user asks to read, view, get, update, modify, or close HSD articles, sightings, or hardware sighting database entries.
 ---
 
 # HSD Update Skill
