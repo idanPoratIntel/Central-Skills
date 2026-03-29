@@ -11,6 +11,6 @@
     "name": "HSD Update",
     "description": "Read and update HSD articles via the HSD REST API with Kerberos/SSPI authentication.",
     "path": "skills/hsd-update",
-    "version": "1"
+    "version": "2"
   }
 ]
