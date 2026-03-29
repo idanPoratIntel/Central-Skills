@@ -4,7 +4,7 @@
     "name": "Geni MCP Proxy Dev",
     "description": "MCP proxy server for Geni (dev).",
     "path": "mcp/geni-mcp-proxy-dev",
-    "version": "2.0.0",
+    "version": "2",
     "kind": "exe",
     "artifact": "Geni_MCP_proxy_dev.exe"
   }

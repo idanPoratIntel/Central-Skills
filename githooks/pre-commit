@@ -1,0 +1,19 @@
+#!/bin/sh
+# Bump major-only versions in skills.json / mcp.json when skill or MCP package files change.
+# Enable: git config core.hooksPath githooks
+
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+python scripts/bump_versions.py --staged
+
+# Re-stage manifest if the hook updated it
+if ! git diff --quiet -- skills.json 2>/dev/null; then
+  git add skills.json
+fi
+if ! git diff --quiet -- mcp.json 2>/dev/null; then
+  git add mcp.json
+fi
+
+exit 0

@@ -1,0 +1,43 @@
+# After a push that changes files under skills/ or mcp/, bump major versions in
+# skills.json / mcp.json and push a follow-up commit. The workflow only triggers
+# on those paths, so a commit that only updates the JSON files does not re-run it.
+
+name: Bump skill and MCP versions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/**"
+      - "mcp/**"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bump versions from last commit
+        run: python scripts/bump_versions.py --git-range HEAD~1..HEAD
+
+      - name: Commit and push if manifests changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add skills.json mcp.json
+          if git diff --staged --quiet; then
+            echo "No version bump needed."
+            exit 0
+          fi
+          git commit -m "chore: bump versions for changed skills/MCP"
+          git push

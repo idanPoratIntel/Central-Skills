@@ -4,13 +4,13 @@
     "name": "My Teams Messages",
     "description": "Retrieve your own Microsoft Teams messages from chats and channels using Graph Search API with MSAL device-code authentication.",
     "path": "skills/my-teams-messages",
-    "version": "1.0.0"
+    "version": "1"
   },
   {
     "id": "hsd-update",
     "name": "HSD Update",
     "description": "Read and update HSD articles via the HSD REST API with Kerberos/SSPI authentication.",
     "path": "skills/hsd-update",
-    "version": "1.0.3"
+    "version": "1"
   }
 ]
