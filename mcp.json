@@ -7,5 +7,47 @@
     "version": "3",
     "kind": "exe",
     "artifact": "Geni_MCP_proxy_dev.exe"
+  },
+  {
+    "id": "confluence-mcp",
+    "name": "Confluence MCP",
+    "description": "Access and manage Confluence wiki pages, spaces, and documentation. Enables AI-powered knowledge base search, page creation, and content summarization.",
+    "path": "mcp/confluence-mcp",
+    "version": "1"
+  },
+  {
+    "id": "github-mcp",
+    "name": "GitHub MCP",
+    "description": "Full integration with GitHub for managing repositories, pull requests, and issues. Enables automated code reviews, branch management, and project tracking directly from your AI assistant.",
+    "path": "mcp/github-mcp",
+    "version": "1"
+  },
+  {
+    "id": "google-search-mcp",
+    "name": "Google Search MCP",
+    "description": "Provides web search capabilities using Google's Custom Search API. Ideal for fact-checking, retrieving current information, and augmenting AI responses with real-time web data.",
+    "path": "mcp/google-search-mcp",
+    "version": "1"
+  },
+  {
+    "id": "jira-mcp",
+    "name": "Jira MCP",
+    "description": "Integration with Atlassian Jira for agile project management and ticket tracking. Streamlines issue creation, sprint management, and backlog grooming workflows.",
+    "path": "mcp/jira-mcp",
+    "version": "1"
+  },
+  {
+    "id": "postgresql-mcp",
+    "name": "PostgreSQL MCP",
+    "description": "Secure read/write access to PostgreSQL databases with schema introspection. Ideal for data analysis, reporting, and ad-hoc queries against structured data stores.",
+    "path": "mcp/postgresql-mcp",
+    "version": "1"
+  },
+  {
+    "id": "slack-mcp",
+    "name": "Slack MCP",
+    "description": "Real-time communication integration for Slack channels and direct messages. Enables chat-based automation, notifications, and channel management from AI workflows.",
+    "path": "mcp/slack-mcp",
+    "version": "1"
   }
 ]
