@@ -49,5 +49,12 @@
     "description": "Real-time communication integration for Slack channels and direct messages. Enables chat-based automation, notifications, and channel management from AI workflows.",
     "path": "mcp/slack-mcp",
     "version": "1"
+  },
+  {
+    "id": "test-agent",
+    "name": "Test Agent",
+    "description": "A test agent for validating MCP configurations and testing AI agent workflows.",
+    "path": "mcp/test-agent",
+    "version": "1"
   }
 ]
