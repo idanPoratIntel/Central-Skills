@@ -87,6 +87,7 @@ Verify your Kerberos ticket with `klist`.
 
 **Tip:** If you don't know the tenant, subject, or valid field values, GET the article first and inspect its current values.
 
+
 ## Common HSD Fields
 
 | Field | Description |
