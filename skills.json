@@ -11,9 +11,12 @@
     "name": "HSD Update",
     "description": "Read and update HSD articles via the HSD REST API with Kerberos/SSPI authentication.",
     "path": "skills/hsd-update",
-    "version": "2",
+    "version": "3",
     "dependencies": [
-      { "kind": "mcp", "id": "geni-mcp-proxy-dev" }
+      {
+        "kind": "mcp",
+        "id": "geni-mcp-proxy-dev"
+      }
     ]
   }
 ]
